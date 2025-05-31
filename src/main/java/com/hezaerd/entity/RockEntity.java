@@ -24,7 +24,7 @@ public class RockEntity extends ThrownItemEntity {
     private static final double MIN_SKIP_SPEED = 0.05; // Minimum speed required to skip
     private static final double BOUNCE_EFFICIENCY = 0.6; // How much vertical velocity to add
 
-    public int skipsRemaining = 1 + random.nextInt(15); // 1-15 skips initially
+    public int skipsRemaining = 3 + random.nextInt(13); // 3-15 skips initially
     private boolean wasInWater = false;
     private boolean hasSkippedBefore = false;
     private int ticksInWater = 0;
