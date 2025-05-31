@@ -1,0 +1,34 @@
+{
+	"schemaVersion": 1,
+	"id": "skipping_stones",
+	"version": "${version}",
+	"name": "Skipping Stones",
+	"description": "Skip stones on water!",
+	"authors": [
+		"Hezaerd"
+	],
+	"contact": {
+		"homepage": "https://modrinth.com/project/BH8biKNo",
+		"sources": "https://github.com/Hezaerd/Skipping-Stones"
+	},
+	"license": "MIT",
+	"icon": "assets/skipping_stones/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"com.hezaerd.SkippingStones"
+		],
+		"client": [
+			"com.hezaerd.SkippingStonesClient"
+		]
+	},
+	"depends": {
+		"fabricloader": ">=0.16.14",
+		"minecraft": "~1.21.5",
+		"java": ">=21",
+		"fabric-api": "*"
+	},
+	"suggests": {
+		"another-mod": "*"
+	}
+}
