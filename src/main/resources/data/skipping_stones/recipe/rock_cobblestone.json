@@ -1,0 +1,13 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "misc",
+  "ingredients": [
+    [
+      "minecraft:cobblestone"
+    ]
+  ],
+  "result": {
+    "id": "skipping_stones:rock",
+    "count": 3
+  }
+}

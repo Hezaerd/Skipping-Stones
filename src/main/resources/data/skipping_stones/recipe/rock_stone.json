@@ -1,0 +1,13 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "misc",
+  "ingredients": [
+    [
+      "minecraft:stone"
+    ]
+  ],
+  "result": {
+    "id": "skipping_stones:rock",
+    "count": 4
+  }
+}
