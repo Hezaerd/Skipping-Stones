@@ -52,8 +52,7 @@ public class RockEntity extends ThrownItemEntity {
 
     private int currentSkipsPerformed = 0;
     private Vec3d initialPosition;
-
-    private final Set<Integer> triggeredFireworkThresholds = new HashSet<>();
+    private boolean hasTriggeredFirework = false;
     
     public RockEntity(EntityType<? extends RockEntity> entityType, World world) {
         super(entityType, world);
@@ -161,83 +160,48 @@ public class RockEntity extends ThrownItemEntity {
 
         this.playSound(SoundEvents.ENTITY_PLAYER_SPLASH, 0.8F, 1.0F + this.random.nextFloat() * 0.4F);
 
-        displaySkipCount();
-        checkAndSpawnFireworks();
-    }
-
-    private void displaySkipCount() {
-        if (this.getWorld().isClient()) return;
-
-        Entity owner = this.getOwner();
-        if (owner instanceof ServerPlayerEntity player) {
-            // display current skip count, just the number
-            player.sendMessage(Text.literal((String.valueOf(currentSkipsPerformed))), true);
-        }
-    }
-
-    private void checkAndSpawnFireworks() {
-        if (this.getWorld().isClient()) return;
-
-        for (int threshold : FIREWORK_THRESHOLDS) {
-            if (currentSkipsPerformed >= threshold && !triggeredFireworkThresholds.contains(threshold)) {
-                spawnCelebrationFirework(threshold);
-                triggeredFireworkThresholds.add(threshold);
+        if (!this.getWorld().isClient()) {
+            Entity owner = this.getOwner();
+            if (owner instanceof ServerPlayerEntity player) {
+                // display current skip count, just the number
+                player.sendMessage(Text.literal((String.valueOf(currentSkipsPerformed))), true);
             }
+        }
+
+        if (currentSkipsPerformed == 6 && !hasTriggeredFirework) {
+            spawnCelebrationFirework();
+            hasTriggeredFirework = true;
         }
     }
     
-    private void spawnCelebrationFirework(int milestone) {
+    private void spawnCelebrationFirework() {
         if (!(this.getWorld() instanceof ServerWorld serverWorld)) return;
 
-        // Create firework stack with custom effects based on milestone
         ItemStack fireworkStack = new ItemStack(Items.FIREWORK_ROCKET);
 
-        // Create firework explosion with colors based on milestone
-        FireworkExplosionComponent explosion = switch (milestone) {
-            case 5 -> new FireworkExplosionComponent(
-                    FireworkExplosionComponent.Type.SMALL_BALL,
-                    IntList.of(DyeColor.YELLOW.getFireworkColor()),
-                    IntList.of(), // No fade colors
-                    false, // No trail
-                    false  // No twinkle
-            );
-            case 10 -> new FireworkExplosionComponent(
-                    FireworkExplosionComponent.Type.LARGE_BALL,
-                    IntList.of(DyeColor.ORANGE.getFireworkColor(), DyeColor.RED.getFireworkColor()),
-                    IntList.of(),
-                    false,
-                    false
-            );
-            case 15 -> new FireworkExplosionComponent(
-                    FireworkExplosionComponent.Type.BURST,
-                    IntList.of(DyeColor.PURPLE.getFireworkColor(), DyeColor.MAGENTA.getFireworkColor()),
-                    IntList.of(),
-                    true, // Has trail
-                    false
-            );
-            case 20 -> new FireworkExplosionComponent(
-                    FireworkExplosionComponent.Type.STAR,
-                    IntList.of(
-                            DyeColor.LIGHT_BLUE.getFireworkColor(),
-                            DyeColor.CYAN.getFireworkColor(),
-                            DyeColor.WHITE.getFireworkColor()
-                    ),
-                    IntList.of(),
-                    true, // Has trail
-                    true  // Has twinkle
-            );
-            default -> new FireworkExplosionComponent(
-                    FireworkExplosionComponent.Type.SMALL_BALL,
-                    IntList.of(DyeColor.WHITE.getFireworkColor()),
-                    IntList.of(),
-                    false,
-                    false
-            );
-        };
-        
-        // Set the firework components
+        // Random firework colors
+        DyeColor[] colors = DyeColor.values();
+        DyeColor primaryColor = colors[random.nextInt(colors.length)];
+        DyeColor secondaryColor = colors[random.nextInt(colors.length)];
+
+        // Random firework shape
+        FireworkExplosionComponent.Type[] shapes = FireworkExplosionComponent.Type.values();
+        FireworkExplosionComponent.Type shape = shapes[random.nextInt(shapes.length)];
+
+        // Random effects
+        boolean hasTrail = random.nextBoolean();
+        boolean hasTwinkle = random.nextBoolean();
+
+        FireworkExplosionComponent explosion = new FireworkExplosionComponent(
+                shape,
+                IntList.of(primaryColor.getFireworkColor(), secondaryColor.getFireworkColor()),
+                IntList.of(), // No fade colors
+                hasTrail,
+                hasTwinkle
+        );
+
         FireworksComponent fireworksComponent = new FireworksComponent(
-                milestone >= 15 ? 2 : 1, // Flight duration (higher for bigger milestones)
+                1 + random.nextInt(2), // Random flight duration 1-2
                 List.of(explosion)
         );
 
