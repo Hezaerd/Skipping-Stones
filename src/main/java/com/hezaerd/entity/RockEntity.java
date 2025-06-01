@@ -3,24 +3,36 @@ package com.hezaerd.entity;
 import com.hezaerd.registry.ModEntityType;
 import com.hezaerd.registry.ModItems;
 import com.hezaerd.registry.ModStats;
+import it.unimi.dsi.fastutil.ints.IntList;
+import net.minecraft.component.DataComponentTypes;
+import net.minecraft.component.type.FireworkExplosionComponent;
+import net.minecraft.component.type.FireworksComponent;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityStatuses;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.projectile.FireworkRocketEntity;
+import net.minecraft.entity.projectile.ProjectileEntity;
 import net.minecraft.entity.projectile.thrown.ThrownItemEntity;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
+import net.minecraft.item.Items;
 import net.minecraft.registry.Registries;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundEvents;
 import net.minecraft.stat.ServerStatHandler;
 import net.minecraft.stat.Stats;
+import net.minecraft.util.DyeColor;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.hit.EntityHitResult;
 import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
+
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 public class RockEntity extends ThrownItemEntity {
 
@@ -29,6 +41,8 @@ public class RockEntity extends ThrownItemEntity {
     private static final double MIN_SKIP_SPEED = 0.05;
     private static final double BOUNCE_EFFICIENCY = 0.6;
 
+    private static final int[] FIREWORK_THRESHOLDS = {5, 10, 15, 20};
+    
     public int skipsRemaining = 3 + random.nextInt(13);
     private boolean wasInWater = false;
     private boolean hasSkippedBefore = false;
@@ -38,6 +52,8 @@ public class RockEntity extends ThrownItemEntity {
     private int currentSkipsPerformed = 0;
     private Vec3d initialPosition;
 
+    private final Set<Integer> triggeredFireworkThresholds = new HashSet<>();
+    
     public RockEntity(EntityType<? extends RockEntity> entityType, World world) {
         super(entityType, world);
         if (!world.isClient()) {
@@ -143,8 +159,92 @@ public class RockEntity extends ThrownItemEntity {
         hasSkippedBefore = true;
 
         this.playSound(SoundEvents.ENTITY_PLAYER_SPLASH, 0.8F, 1.0F + this.random.nextFloat() * 0.4F);
+
+        checkAndSpawnFireworks();
     }
 
+    private void checkAndSpawnFireworks() {
+        if (this.getWorld().isClient()) return;
+
+        for (int threshold : FIREWORK_THRESHOLDS) {
+            if (currentSkipsPerformed >= threshold && !triggeredFireworkThresholds.contains(threshold)) {
+                spawnCelebrationFirework(threshold);
+                triggeredFireworkThresholds.add(threshold);
+            }
+        }
+    }
+    
+    private void spawnCelebrationFirework(int milestone) {
+        if (!(this.getWorld() instanceof ServerWorld serverWorld)) return;
+
+        // Create firework stack with custom effects based on milestone
+        ItemStack fireworkStack = new ItemStack(Items.FIREWORK_ROCKET);
+
+        // Create firework explosion with colors based on milestone
+        FireworkExplosionComponent explosion = switch (milestone) {
+            case 5 -> new FireworkExplosionComponent(
+                    FireworkExplosionComponent.Type.SMALL_BALL,
+                    IntList.of(DyeColor.YELLOW.getFireworkColor()),
+                    IntList.of(), // No fade colors
+                    false, // No trail
+                    false  // No twinkle
+            );
+            case 10 -> new FireworkExplosionComponent(
+                    FireworkExplosionComponent.Type.LARGE_BALL,
+                    IntList.of(DyeColor.ORANGE.getFireworkColor(), DyeColor.RED.getFireworkColor()),
+                    IntList.of(),
+                    false,
+                    false
+            );
+            case 15 -> new FireworkExplosionComponent(
+                    FireworkExplosionComponent.Type.BURST,
+                    IntList.of(DyeColor.PURPLE.getFireworkColor(), DyeColor.MAGENTA.getFireworkColor()),
+                    IntList.of(),
+                    true, // Has trail
+                    false
+            );
+            case 20 -> new FireworkExplosionComponent(
+                    FireworkExplosionComponent.Type.STAR,
+                    IntList.of(
+                            DyeColor.LIGHT_BLUE.getFireworkColor(),
+                            DyeColor.CYAN.getFireworkColor(),
+                            DyeColor.WHITE.getFireworkColor()
+                    ),
+                    IntList.of(),
+                    true, // Has trail
+                    true  // Has twinkle
+            );
+            default -> new FireworkExplosionComponent(
+                    FireworkExplosionComponent.Type.SMALL_BALL,
+                    IntList.of(DyeColor.WHITE.getFireworkColor()),
+                    IntList.of(),
+                    false,
+                    false
+            );
+        };
+        
+        // Set the firework components
+        FireworksComponent fireworksComponent = new FireworksComponent(
+                milestone >= 15 ? 2 : 1, // Flight duration (higher for bigger milestones)
+                List.of(explosion)
+        );
+
+        fireworkStack.set(DataComponentTypes.FIREWORKS, fireworksComponent);
+
+        // Spawn firework slightly above the rock position
+        Vec3d spawnPos = this.getPos().add(0, 2, 0);
+        FireworkRocketEntity firework = new FireworkRocketEntity(
+                this.getWorld(),
+                fireworkStack,
+                spawnPos.x,
+                spawnPos.y,
+                spawnPos.z,
+                true
+        );
+
+        ProjectileEntity.spawn(firework, serverWorld, fireworkStack);
+    }
+    
     // Override remove instead of discard
     @Override
     public void remove(Entity.RemovalReason reason) {
