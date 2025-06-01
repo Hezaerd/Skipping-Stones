@@ -1,3 +1,5 @@
 {
-  "item.skipping_stones.rock": "Caillou"
+  "item.skipping_stones.rock": "Caillou",
+  "stat.skipping_stones.best_rock_skips": "Meilleur nombre de ricochets",
+  "stat.skipping_stones.best_skip_distance": "Plus grande distance de ricochet"
 }

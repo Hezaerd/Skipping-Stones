@@ -2,6 +2,7 @@ package com.hezaerd.entity;
 
 import com.hezaerd.registry.ModEntityType;
 import com.hezaerd.registry.ModItems;
+import com.hezaerd.registry.ModStats;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityStatuses;
 import net.minecraft.entity.EntityType;
@@ -9,8 +10,12 @@ import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.projectile.thrown.ThrownItemEntity;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
+import net.minecraft.registry.Registries;
+import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundEvents;
+import net.minecraft.stat.ServerStatHandler;
+import net.minecraft.stat.Stats;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.hit.EntityHitResult;
 import net.minecraft.util.hit.HitResult;
@@ -20,22 +25,31 @@ import net.minecraft.world.World;
 public class RockEntity extends ThrownItemEntity {
 
     private static final float DEFAULT_DAMAGE = 1.0F;
-    private static final double HORIZONTAL_DAMPING = 0.85; // Retain 85% of horizontal velocity
-    private static final double MIN_SKIP_SPEED = 0.05; // Minimum speed required to skip
-    private static final double BOUNCE_EFFICIENCY = 0.6; // How much vertical velocity to add
+    private static final double HORIZONTAL_DAMPING = 0.85;
+    private static final double MIN_SKIP_SPEED = 0.05;
+    private static final double BOUNCE_EFFICIENCY = 0.6;
 
-    public int skipsRemaining = 3 + random.nextInt(13); // 3-15 skips initially
+    public int skipsRemaining = 3 + random.nextInt(13);
     private boolean wasInWater = false;
     private boolean hasSkippedBefore = false;
     private int ticksInWater = 0;
-    private int maxLifetime = 600; // 30 seconds max lifetime
+    private int maxLifetime = 600;
+
+    private int currentSkipsPerformed = 0;
+    private Vec3d initialPosition;
 
     public RockEntity(EntityType<? extends RockEntity> entityType, World world) {
         super(entityType, world);
+        if (!world.isClient()) {
+            this.initialPosition = this.getPos();
+        }
     }
 
     public RockEntity(World world, LivingEntity owner, ItemStack stack) {
         super(ModEntityType.ROCK, owner, world, stack);
+        if (!world.isClient()) {
+            this.initialPosition = this.getPos();
+        }
     }
 
     @Override
@@ -49,28 +63,24 @@ public class RockEntity extends ThrownItemEntity {
             Entity entity = entityHitResult.getEntity();
             entity.damage(serverWorld, this.getDamageSources().thrown(this, this.getOwner()), DEFAULT_DAMAGE);
         }
-        // Don't call super.onEntityHit to avoid immediate discard
         this.playSound(SoundEvents.BLOCK_STONE_BREAK, 1.0F, 1.2F);
         this.getWorld().sendEntityStatus(this, EntityStatuses.PLAY_DEATH_SOUND_OR_ADD_PROJECTILE_HIT_PARTICLES);
-        this.discard();
+        this.discard(); // discard() will eventually call our overridden remove()
     }
 
     @Override
     protected void onBlockHit(BlockHitResult blockHitResult) {
-        // Only discard on solid block hits, not water
         if (!this.getWorld().isClient) {
             this.playSound(SoundEvents.BLOCK_STONE_BREAK, 1.0F, 1.2F);
             this.getWorld().sendEntityStatus(this, EntityStatuses.PLAY_DEATH_SOUND_OR_ADD_PROJECTILE_HIT_PARTICLES);
-            this.discard();
+            this.discard(); // discard() will eventually call our overridden remove()
         }
     }
 
     @Override
     protected void onCollision(HitResult hitResult) {
-        // Only handle non-water collisions here
         if (hitResult.getType() == HitResult.Type.BLOCK) {
             BlockHitResult blockHit = (BlockHitResult) hitResult;
-            // Check if it's water - if so, let tick() handle the skipping
             if (this.getWorld().getBlockState(blockHit.getBlockPos()).getFluidState().isEmpty()) {
                 super.onCollision(hitResult);
             }
@@ -82,23 +92,20 @@ public class RockEntity extends ThrownItemEntity {
     @Override
     public void tick() {
         super.tick();
-
         if (this.getWorld().isClient) return;
 
         maxLifetime--;
-        if (maxLifetime <= 0) {
+        if (maxLifetime <= 0 && !this.isRemoved()) { // Check !isRemoved
             this.discard();
             return;
         }
 
         boolean currentlyInWater = this.isTouchingWater();
-
         if (currentlyInWater) {
             ticksInWater++;
-
             if (!wasInWater && canSkip()) {
                 performSkip();
-            } else if (ticksInWater > 5) {
+            } else if (ticksInWater > 5 && !this.isRemoved()) { // Check !isRemoved
                 this.discard();
                 return;
             }
@@ -109,44 +116,60 @@ public class RockEntity extends ThrownItemEntity {
         }
 
         wasInWater = currentlyInWater;
-        if (currentlyInWater && this.random.nextInt(200) == 1) {
+        if (currentlyInWater && this.random.nextInt(200) == 1 && !this.isRemoved()) { // Check !isRemoved
             this.discard();
         }
     }
 
     private boolean canSkip() {
         if (skipsRemaining <= 0) return false;
-
         Vec3d velocity = this.getVelocity();
         double horizontalSpeed = Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z);
-
         if (horizontalSpeed <= MIN_SKIP_SPEED) return false;
-
-        if (!hasSkippedBefore) {
-            return true;
-        }
-
+        if (!hasSkippedBefore) return true;
         return velocity.y > -0.3;
     }
 
     private void performSkip() {
         Vec3d currentVel = this.getVelocity();
-
-        // Preserve and dampen horizontal momentum
         double newX = currentVel.x * HORIZONTAL_DAMPING;
         double newZ = currentVel.z * HORIZONTAL_DAMPING;
-
-        // Calculate bounce based on impact speed
         double horizontalSpeed = Math.sqrt(newX * newX + newZ * newZ);
         double bounceHeight = Math.min(0.4, horizontalSpeed * BOUNCE_EFFICIENCY);
-
-        // Apply the new velocity
         this.setVelocity(newX, bounceHeight, newZ);
 
         skipsRemaining--;
-        hasSkippedBefore = true; // Mark that we've skipped at least once
+        currentSkipsPerformed++;
+        hasSkippedBefore = true;
 
-        // Play skip sound
         this.playSound(SoundEvents.ENTITY_PLAYER_SPLASH, 0.8F, 1.0F + this.random.nextFloat() * 0.4F);
+    }
+
+    // Override remove instead of discard
+    @Override
+    public void remove(Entity.RemovalReason reason) {
+        // Perform stat updates before the entity is actually removed
+        if (!this.getWorld().isClient()) { // Check if on server
+            Entity owner = this.getOwner();
+            if (owner instanceof ServerPlayerEntity player) {
+                ServerStatHandler statHandler = player.getStatHandler();
+
+                // Update BEST_ROCK_SKIPS
+                int oldBestSkips = statHandler.getStat(Stats.CUSTOM.getOrCreateStat(ModStats.BEST_ROCK_SKIPS));
+                if (currentSkipsPerformed > oldBestSkips)
+                    statHandler.setStat(player, Stats.CUSTOM.getOrCreateStat(ModStats.BEST_ROCK_SKIPS), currentSkipsPerformed);
+
+                // Update BEST_SKIP_DISTANCE if at least one skip occurred
+                if (hasSkippedBefore && this.initialPosition != null) {
+                    double distanceTraveled = this.getPos().distanceTo(this.initialPosition);
+                    int distanceCm = (int) (distanceTraveled * 100.0);
+
+                    int oldBestDistance = statHandler.getStat(Stats.CUSTOM.getOrCreateStat(ModStats.BEST_SKIP_DISTANCE));
+                    if (distanceCm > oldBestDistance)
+                        statHandler.setStat(player, Stats.CUSTOM.getOrCreateStat(ModStats.BEST_SKIP_DISTANCE), distanceCm);
+                }
+            }
+        }
+        super.remove(reason); // Call the super method to ensure proper removal
     }
 }

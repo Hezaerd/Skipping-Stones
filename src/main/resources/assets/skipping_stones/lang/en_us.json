@@ -1,3 +1,5 @@
 {
-  "item.skipping_stones.rock": "Rock"
+  "item.skipping_stones.rock": "Rock",
+  "stat.skipping_stones.best_rock_skips": "Best rock skips",
+  "stat.skipping_stones.best_skip_distance": "Best skip distance"
 }
