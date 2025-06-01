@@ -23,6 +23,7 @@ import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundEvents;
 import net.minecraft.stat.ServerStatHandler;
 import net.minecraft.stat.Stats;
+import net.minecraft.text.Text;
 import net.minecraft.util.DyeColor;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.hit.EntityHitResult;
@@ -160,7 +161,18 @@ public class RockEntity extends ThrownItemEntity {
 
         this.playSound(SoundEvents.ENTITY_PLAYER_SPLASH, 0.8F, 1.0F + this.random.nextFloat() * 0.4F);
 
+        displaySkipCount();
         checkAndSpawnFireworks();
+    }
+
+    private void displaySkipCount() {
+        if (this.getWorld().isClient()) return;
+
+        Entity owner = this.getOwner();
+        if (owner instanceof ServerPlayerEntity player) {
+            // display current skip count, just the number
+            player.sendMessage(Text.literal((String.valueOf(currentSkipsPerformed))), true);
+        }
     }
 
     private void checkAndSpawnFireworks() {
